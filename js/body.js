@@ -44,7 +44,7 @@ function muscleMaterial() {
   return m;
 }
 
-export async function loadBody(url = 'assets/body.bin') {
+export async function loadBody(url = globalThis.STRETCH_ATLAS_MODEL || 'assets/body.bin') {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Could not load ${url} (${res.status})`);
   const buf = await res.arrayBuffer();
