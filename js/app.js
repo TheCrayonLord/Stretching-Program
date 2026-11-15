@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from '../vendor/OrbitControls.js';
-import { buildBody } from './body.js';
+import { loadBody } from './body.js';
 import { REGIONS, REGION_BY_ID } from './data.js';
 
 const canvas = document.getElementById('scene');
@@ -29,7 +29,15 @@ key.target.position.set(0, 0, -3);
 fill.target.position.set(0, 0, -3);
 scene.add(camera);
 
-const body = buildBody();
+const loading = document.getElementById('loading');
+let body;
+try {
+  body = await loadBody();
+  loading.remove();
+} catch (err) {
+  loading.textContent = 'Could not load the 3D model. Serve this folder over HTTP and reload.';
+  throw err;
+}
 scene.add(body.root);
 
 // soft contact shadow
@@ -60,7 +68,7 @@ controls.zoomToCursor = true;
 controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
 /* ---------- camera framing ---------- */
-const HOME = { center: new THREE.Vector3(0, 0.9, 0), radius: 0.98 };
+const HOME = { center: new THREE.Vector3(0, body.height * 0.5, 0), radius: body.height * 0.55 };
 let flight = null;
 
 function fitDistance(radius) {
@@ -198,6 +206,7 @@ document.querySelector('.views').addEventListener('click', (ev) => {
 });
 
 /* ---------- panel ---------- */
+const CREDIT = '<p class="note">3D model: BodyParts3D © The Database Center for Life Science, CC BY-SA 2.1 Japan.</p>';
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function search(query) {
@@ -226,7 +235,7 @@ function renderList() {
           <b>${esc(region.name)}</b>
           <span>${esc(region.muscles)}</span>
           ${via ? `<em>Includes: ${esc(via)}</em>` : ''}
-        </button>`).join('')
+        </button>`).join('') + `<div class="empty">${CREDIT}</div>`
     : `<p class="empty">No body part matches “${esc(searchEl.value)}”. Try “hamstrings”, “shoulder” or “lower back”.</p>`;
 }
 
@@ -245,7 +254,8 @@ function renderDetail(region) {
         <p>${esc(st.how)}</p>
         <a href="${esc(st.url)}" target="_blank" rel="noopener">Watch on YouTube</a>
       </section>`).join('')}
-    <p class="note">Ease into each stretch and stop if you feel sharp pain. Video links open a YouTube search for the stretch.</p>`;
+    <p class="note">Ease into each stretch and stop if you feel sharp pain. Video links open a YouTube search for the stretch.</p>
+    ${CREDIT}`;
 }
 
 listEl.addEventListener('click', (ev) => {
