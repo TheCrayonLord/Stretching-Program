@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Stretch Atlas</title>
+  <meta name="description" content="Tap a muscle on the 3D anatomical figure to see how to stretch it.">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <main id="stage">
+    <canvas id="scene" aria-label="3D muscular figure. Tap a muscle to select it."></canvas>
+    <header class="plate">
+      <h1>Stretch Atlas</h1>
+      <p>Tap a muscle &middot; drag to rotate &middot; pinch to zoom &middot; two fingers to pan</p>
+    </header>
+    <div class="views" role="group" aria-label="Camera">
+      <button type="button" data-view="front">Front</button>
+      <button type="button" data-view="back">Back</button>
+      <button type="button" data-view="side">Side</button>
+    </div>
+    <div id="tip" hidden></div>
+  </main>
+
+  <aside id="panel">
+    <div class="search">
+      <input id="q" type="search" placeholder="Search a body part or stretch…" autocomplete="off" aria-label="Search body parts">
+    </div>
+    <div id="list" role="list"></div>
+    <article id="detail" hidden></article>
+  </aside>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
