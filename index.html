@@ -21,17 +21,24 @@
       <button type="button" data-view="front">Front</button>
       <button type="button" data-view="back">Back</button>
       <button type="button" data-view="side">Side</button>
+      <button type="button" id="peel" aria-pressed="false" title="Fade the outer muscles to see the deep layer">Deep layer</button>
     </div>
+    <div id="legend" hidden><span><i class="swatch primary"></i>Primary</span><span><i class="swatch secondary"></i>Secondary</span></div>
     <div id="tip" hidden></div>
     <div id="loading">Loading anatomy…</div>
     <p class="credit">Model: BodyParts3D © DBCLS, CC BY-SA 2.1 JP</p>
   </main>
 
   <aside id="panel">
+    <nav class="tabs" role="tablist" aria-label="Mode">
+      <button type="button" role="tab" data-tab="stretch" aria-selected="true">Stretches</button>
+      <button type="button" role="tab" data-tab="exercise" aria-selected="false">Exercises</button>
+    </nav>
     <div class="search">
-      <input id="q" type="search" placeholder="Search a body part or stretch…" autocomplete="off" aria-label="Search body parts">
+      <input id="q" type="search" placeholder="Search a muscle, stretch or exercise…" autocomplete="off" aria-label="Search body parts">
     </div>
-    <div id="list" role="list"></div>
+    <div id="filters" class="filters" hidden></div>
+    <div id="list"></div>
     <article id="detail" hidden></article>
   </aside>
 

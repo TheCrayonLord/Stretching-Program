@@ -19,7 +19,7 @@ export const REGIONS = [
   },
   {
     id: 'traps', name: 'Upper Back & Traps', view: [0, 0.35, -1],
-    muscles: 'Trapezius, rhomboids, rotator cuff',
+    muscles: 'Trapezius, rhomboids',
     aliases: 'trapezius rhomboid shoulder blade scapula thoracic upper back mid back posture knots',
     stretches: [
       s('Thread the Needle', 'From all fours, slide one arm under the other until the shoulder and ear rest on the floor. Breathe into the upper back.', '30–45 s each side', 'thread the needle stretch'),
@@ -30,8 +30,8 @@ export const REGIONS = [
   },
   {
     id: 'shoulders', name: 'Shoulders', view: [0.9, 0.25, 0.6],
-    muscles: 'Deltoids (anterior, lateral, posterior)',
-    aliases: 'deltoid delts shoulder rotator',
+    muscles: 'Deltoids (front, side, rear)',
+    aliases: 'deltoid delts shoulder',
     stretches: [
       s('Cross-Body Shoulder Stretch', 'Bring one arm across the chest and hug it in with the other forearm, keeping the shoulder low.', '30 s each side', 'cross body shoulder stretch'),
       s('Sleeper Stretch', 'Lie on your side with the bottom elbow bent 90°, then gently press the forearm toward the floor.', '30 s each side', 'sleeper stretch shoulder'),
@@ -127,8 +127,8 @@ export const REGIONS = [
   },
   {
     id: 'glutes', name: 'Glutes', view: [0.25, 0, -1],
-    muscles: 'Gluteus maximus & medius, piriformis',
-    aliases: 'glute butt buttocks bum piriformis sciatica hip rotators',
+    muscles: 'Gluteus maximus, medius & minimus',
+    aliases: 'glute butt buttocks bum',
     stretches: [
       s('Figure-Four Stretch', 'Lie on your back, cross one ankle over the opposite knee and pull the legs toward the chest.', '30–45 s each side', 'figure four stretch'),
       s('Pigeon Pose', 'Bring one shin forward across the mat, extend the other leg back and fold over the front leg.', '1–2 min each side', 'pigeon pose stretch'),
@@ -224,5 +224,53 @@ export const REGIONS = [
     ],
   },
 ];
+
+// Deep and stabiliser muscles. Selecting these fades the outer muscles.
+REGIONS.push(
+  {
+    id: 'rotatorcuff', name: 'Rotator Cuff', deep: true, view: [0.7, 0.25, -1],
+    muscles: 'Supraspinatus, infraspinatus, teres minor, subscapularis',
+    aliases: 'rotator cuff shoulder impingement sits si ts external rotation internal rotation shoulder stability',
+    stretches: [
+      s('Sleeper Stretch', 'Lie on the affected side with the shoulder and elbow at 90°, then gently press the forearm toward the floor with the other hand.', '30 s, 2–3 rounds', 'sleeper stretch rotator cuff'),
+      s('Cross-Body Stretch', 'Draw one arm across the chest just below shoulder height and hold it there with the other forearm.', '30 s each side', 'cross body posterior shoulder stretch'),
+      s('Towel Internal Rotation Stretch', 'Hold a towel behind your back, one hand high and one low, and pull the lower hand up with the top hand.', '30 s each side', 'towel internal rotation stretch shoulder'),
+      s('Doorway External Rotation Stretch', 'Hold a door frame with the elbow bent 90° at your side and turn the body away from the hand.', '30 s each side', 'doorway external rotation stretch subscapularis'),
+    ],
+  },
+  {
+    id: 'deepcore', name: 'Deep Core', deep: true, view: [0.35, 0.05, 1],
+    muscles: 'Transversus abdominis, multifidus, diaphragm, pelvic floor',
+    aliases: 'deep core tva transverse abdominis multifidus diaphragm breathing pelvic floor kegel stability bracing',
+    stretches: [
+      s('Diaphragmatic Breathing', 'Lie on your back with knees bent, one hand on the belly. Breathe in through the nose so the belly and lower ribs widen, then exhale slowly.', '5 min', 'diaphragmatic breathing'),
+      s('Child\'s Pose Breathing', 'In child\'s pose, breathe into the back of the ribs and feel the lower back widen with each inhale.', '1–2 min', 'childs pose breathing back of ribs'),
+      s('Happy Baby', 'Lie on your back, hold the outsides of the feet with knees wide and let the pelvic floor soften as you breathe.', '1 min', 'happy baby pose pelvic floor'),
+      s('Cobra Pose', 'Lie face down and press the chest up with the hips grounded to lengthen the front of the trunk.', '20–30 s', 'cobra pose stretch'),
+    ],
+  },
+  {
+    id: 'hiprotators', name: 'Deep Hip Rotators', deep: true, view: [0.45, 0, -1],
+    muscles: 'Piriformis, gemelli, obturators, quadratus femoris',
+    aliases: 'piriformis sciatica deep six hip rotators external rotators gemellus obturator',
+    stretches: [
+      s('Supine Piriformis Stretch', 'Lie on your back, cross one ankle over the opposite knee and pull that thigh toward your chest.', '30–45 s each side', 'supine piriformis stretch'),
+      s('Pigeon Pose', 'Bring one shin forward across the mat, extend the other leg back and fold over the front leg.', '1–2 min each side', 'pigeon pose stretch'),
+      s('Knee-to-Opposite-Shoulder', 'Lie on your back and pull one knee across the body toward the opposite shoulder.', '30 s each side', 'knee to opposite shoulder piriformis stretch'),
+      s('Seated Piriformis Stretch', 'Sit tall with one ankle on the opposite knee and hinge forward from the hips.', '30–45 s each side', 'seated piriformis stretch chair'),
+    ],
+  },
+  {
+    id: 'deepneck', name: 'Deep Neck', deep: true, view: [0.4, 0.1, -1],
+    muscles: 'Deep neck flexors, suboccipitals, cervical rotators',
+    aliases: 'deep neck flexors longus colli suboccipital tension headache forward head posture',
+    stretches: [
+      s('Chin Tucks', 'Slide the chin straight back without tilting the head, then relax.', '10 slow reps', 'chin tuck exercise neck'),
+      s('Suboccipital Stretch', 'Tuck the chin and gently draw the back of the head up and forward with both hands.', '30 s', 'suboccipital stretch'),
+      s('Suboccipital Ball Release', 'Lie on your back with two tennis balls under the base of the skull and nod slowly.', '1–2 min', 'suboccipital release tennis ball'),
+      s('Nod and Rotate', 'Nod the chin slightly, then turn the head slowly side to side within a comfortable range.', '10 each way', 'upper cervical rotation mobility'),
+    ],
+  },
+);
 
 export const REGION_BY_ID = Object.fromEntries(REGIONS.map((r) => [r.id, r]));

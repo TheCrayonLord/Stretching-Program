@@ -55,16 +55,16 @@ export async function loadBody(url = globalThis.STRETCH_ATLAS_MODEL || 'assets/b
   const [sx, sy, sz] = head.size;
 
   const root = new THREE.Group();
-  const regions = new Map();         // id -> { all: [mesh], near: [mesh] }
-  const regionMaterials = new Map(); // id -> [material]
+  const muscles = new Map(); // id -> { meshes, near, mat }
   const pickables = [];
 
-  const boneMat = new THREE.MeshStandardMaterial({ color: 0xe9dfcb, roughness: 0.6 });
+  const fadeable = (m) => { m.transparent = true; m.userData.fade = 1; return m; };
+  const boneMat = fadeable(new THREE.MeshStandardMaterial({ color: 0xe9dfcb, roughness: 0.6 }));
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0xf6f3ee, roughness: 0.25 });
-  const faceMat = muscleMaterial();
-  const matFor = (id) => {
-    if (!regionMaterials.has(id)) regionMaterials.set(id, [muscleMaterial()]);
-    return regionMaterials.get(id)[0];
+  const faceMat = fadeable(muscleMaterial());
+  const muscleFor = (id) => {
+    if (!muscles.has(id)) muscles.set(id, { meshes: [], near: [], mat: fadeable(muscleMaterial()) });
+    return muscles.get(id);
   };
 
   for (const e of head.meshes) {
@@ -90,18 +90,48 @@ export async function loadBody(url = globalThis.STRETCH_ATLAS_MODEL || 'assets/b
     geo.computeBoundingSphere();
     geo.computeBoundingBox();
 
-    const mat = e.kind === 'bone' ? boneMat : e.kind === 'eye' ? eyeMat : e.region ? matFor(e.region) : faceMat;
+    const group = e.muscle ? muscleFor(e.muscle) : null;
+    const mat = e.kind === 'bone' ? boneMat : e.kind === 'eye' ? eyeMat : group ? group.mat : faceMat;
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.userData.region = e.region;
+    mesh.userData.muscle = e.muscle || null;
     root.add(mesh);
     pickables.push(mesh);
-    if (e.region) {
-      if (!regions.has(e.region)) regions.set(e.region, { all: [], near: [] });
-      const r = regions.get(e.region);
-      r.all.push(mesh);
-      if (e.side !== 'r') r.near.push(mesh); // close-ups frame the +x side
+    if (group) {
+      group.meshes.push(mesh);
+      if (e.side !== 'r') group.near.push(mesh); // close-ups frame the +x side
     }
   }
 
-  return { root, regions, regionMaterials, pickables, height: sy, credit: head.source };
+  // Which way each muscle faces: from the centre of the nearby bones out to the
+  // muscle (the rear deltoid sits behind the shoulder joint, so look from behind).
+  const bones = [];
+  for (const mesh of pickables) if (mesh.material === boneMat) bones.push(mesh.geometry.attributes.position.array);
+  for (const g of muscles.values()) {
+    const c = new THREE.Vector3();
+    let n = 0;
+    for (const mesh of g.near) {
+      const p = mesh.geometry.attributes.position.array;
+      for (let i = 0; i < p.length; i += 3) { c.x += p[i]; c.y += p[i + 1]; c.z += p[i + 2]; n++; }
+    }
+    c.divideScalar(n || 1);
+    const b = new THREE.Vector3();
+    for (const r of [0.08, 0.14, 0.24]) {
+      let k = 0;
+      b.set(0, 0, 0);
+      for (const p of bones) {
+        for (let i = 0; i < p.length; i += 3) {
+          if (Math.abs(p[i + 1] - c.y) > 0.05) continue;
+          const dx = p[i] - c.x, dz = p[i + 2] - c.z;
+          if (dx * dx + dz * dz > r * r) continue;
+          b.x += p[i]; b.z += p[i + 2]; k++;
+        }
+      }
+      if (k > 40) { b.divideScalar(k); break; }
+      b.set(c.x * 0.5, 0, 0); // fallback: centre of the body at this height
+    }
+    const dir = new THREE.Vector3(c.x - b.x, 0, c.z - b.z);
+    g.facing = dir.lengthSq() > 1e-8 ? dir.normalize() : new THREE.Vector3(0, 0, 1);
+  }
+
+  return { root, muscles, pickables, boneMat, faceMat, height: sy, credit: head.source };
 }

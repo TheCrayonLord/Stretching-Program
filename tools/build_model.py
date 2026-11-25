@@ -6,12 +6,12 @@ Usage: build_model.py <stl dir> <parts_list_e.txt> <FMA.csv> <out.bin>
 Source data: https://github.com/Kevin-Mattheus-Moerman/BodyParts3D
 (BodyParts3D, (c) The Database Center for Life Science, CC BY-SA 2.1 Japan)
 
-Each muscle is decimated, tagged with a body region, and given two baked
+Each muscle is decimated, tagged with a muscle id, and given two baked
 per-vertex attributes used by the shader:
   * fibre coords - position in the plane perpendicular to the muscle's long
     axis, so noise sampled there forms streaks that run along the muscle
   * tendon       - 0..1, how tendon-like (thin, near an end) this spot is
-Meshes are merged per region + side and written as one compact binary.
+Meshes are merged per muscle id + side and written as one compact binary.
 """
 import csv, json, os, re, struct, sys
 import numpy as np
@@ -19,7 +19,7 @@ import trimesh
 import fast_simplification
 
 STL, PARTS, FMA, OUT = sys.argv[1:5]
-MUSCLE_BUDGET, BONE_BUDGET = 250_000, 40_000
+MUSCLE_BUDGET, BONE_BUDGET = 280_000, 40_000
 
 # ---------------------------------------------------------------- names
 names = {}
@@ -41,58 +41,121 @@ def ancestors(i):
     return out
 
 # ---------------------------------------------------------------- classification
-# first match wins; order matters (foot / leg before forearm)
-REGION_RULES = [
-    ('feet', r'of foot|hallucis brevis|abductor hallucis|adductor hallucis|digitorum brevis|flexor accessorius|long plantar'),
-    ('shins', r'tibialis anterior|extensor digitorum longus|extensor hallucis longus|fibularis'),
-    ('calves', r'gastrocnemius|soleus|plantaris|popliteus|calcaneal tendon|tibialis posterior|flexor digitorum longus|flexor hallucis longus'),
-    ('hamstrings', r'biceps femoris|semimembranosus|semitendinosus'),
-    ('quads', r'rectus femoris|vastus'),
-    ('adductors', r'adductor (brevis|longus|magnus|minimus)|gracilis|pectineus'),
-    ('itband', r'tensor fasciae latae|iliotibial'),
-    ('hipflexors', r'psoas|iliacus|sartorius|inguinal'),
-    ('glutes', r'gluteus|piriformis|gemellus|obturator|quadratus femoris'),
-    ('abs', r'rectus abdominis|pyramidalis|linea alba'),
-    ('obliques', r'external oblique|internal oblique|transversus abdominis|serratus anterior'),
-    ('lowerback', r'lumborum|iliocostalis thoracis|longissimus thoracis|spinalis thoracis|semispinalis thoracis|multifidus|serratus posterior inferior|lumbar|thoracic rotator|interspinales (lumborum|thoracis)'),
-    ('lats', r'latissimus|teres major'),
-    ('traps', r'trapezius|rhomboid|infraspinatus|supraspinatus|teres minor|subscapularis|serratus posterior superior'),
-    ('shoulders', r'deltoid'),
-    ('chest', r'pectoralis|subclavius'),
-    ('biceps', r'biceps brachii|brachialis|coracobrachialis'),
-    ('triceps', r'triceps|anconeus'),
-    ('forearms', r'brachioradialis|carpi|digitorum|digiti minimi|pollicis|indicis|pronator|supinator|palmaris|of hand|retinaculum of wrist|interosseous membrane of forearm'),
-    ('neck', r'sternocleidomastoid|scalenus|levator scapulae|splenius|capitis|cervicis|hyoid|thyroid|digastric|cervical|longus colli'),
+# Each source part is mapped to one muscle id (see js/muscles.js for names,
+# body region and depth). First match wins, so the order matters.
+MUSCLE_RULES = [
+    # feet & lower legs
+    ('foot_top', r'extensor digitorum brevis|extensor hallucis brevis'),
+    ('foot_sole', r'of foot|hallucis brevis|abductor hallucis|adductor hallucis|flexor digitorum brevis|flexor accessorius|long plantar'),
+    ('toe_extensors', r'extensor digitorum longus|extensor hallucis longus|fibularis tertius'),
+    ('tib_ant', r'tibialis anterior'),
+    ('peroneals', r'fibularis'),
+    ('achilles', r'calcaneal tendon'),
+    ('gastroc', r'gastrocnemius'),
+    ('soleus', r'soleus'),
+    ('plantaris', r'plantaris'),
+    ('popliteus', r'popliteus'),
+    ('deep_calf', r'tibialis posterior|flexor digitorum longus|flexor hallucis longus'),
+    # thighs & hips
+    ('biceps_fem', r'biceps femoris'),
+    ('semitendinosus', r'semitendinosus'),
+    ('semimembranosus', r'semimembranosus'),
+    ('rectus_fem', r'rectus femoris'),
+    ('vastus_lat', r'vastus lateralis'),
+    ('vastus_med', r'vastus medialis'),
+    ('vastus_int', r'vastus intermedius'),
+    ('add_longus', r'adductor longus'),
+    ('add_brevis', r'adductor brevis'),
+    ('add_magnus', r'adductor (magnus|minimus)'),
+    ('gracilis', r'gracilis'),
+    ('pectineus', r'pectineus'),
+    ('tfl', r'tensor fasciae latae'),
+    ('it_band', r'iliotibial'),
+    ('psoas', r'psoas'),
+    ('iliacus', r'iliacus'),
+    ('sartorius', r'sartorius'),
+    ('glute_max', r'gluteus maximus'),
+    ('glute_med', r'gluteus medius'),
+    ('glute_min', r'gluteus minimus'),
+    ('piriformis', r'piriformis'),
+    ('gemelli', r'gemellus'),
+    ('obturators', r'obturator'),
+    ('quadratus_fem', r'quadratus femoris'),
+    ('pelvic_floor', r'coccygeus|puborectalis|levator ani'),
+    # trunk
+    ('rectus_abs', r'rectus abdominis|pyramidalis|linea alba'),
+    ('transverse_abs', r'transversus abdominis'),
+    ('ext_oblique', r'external oblique|inguinal'),
+    ('int_oblique', r'internal oblique'),
+    ('serratus_ant', r'serratus anterior'),
+    ('intercostals', r'external intercostal|levatores costarum'),
+    ('diaphragm', r'diaphragm'),
+    ('ql', r'quadratus lumborum'),
+    ('multifidus', r'multifidus|lumbar rotator|thoracic rotator|interspinales (lumborum|thoracis)|lumbar intertransversari'),
+    ('serratus_post', r'serratus posterior'),
+    ('erectors', r'iliocostalis (thoracis|lumborum)|longissimus thoracis|spinalis thoracis'),
+    ('latissimus', r'latissimus'),
+    ('teres_major', r'teres major'),
+    ('upper_trap', r'descending part of trapezius'),
+    ('mid_trap', r'transverse part of trapezius'),
+    ('lower_trap', r'ascending part of trapezius'),
+    ('rhomboids', r'rhomboid'),
+    ('supraspinatus', r'supraspinatus'),
+    ('infraspinatus', r'infraspinatus'),
+    ('teres_minor', r'teres minor'),
+    ('subscapularis', r'subscapularis'),
+    # shoulders, chest, arms
+    ('front_delt', r'clavicular part of deltoid'),
+    ('side_delt', r'acromial part of deltoid'),
+    ('rear_delt', r'spinal part of deltoid'),
+    ('upper_pec', r'clavicular part of pectoralis major'),
+    ('pec_major', r'(sternocostal|abdominal) part of pectoralis major'),
+    ('pec_minor', r'pectoralis minor'),
+    ('subclavius', r'subclavius'),
+    ('biceps', r'biceps brachii'),
+    ('coracobrachialis', r'coracobrachialis'),
+    ('brachialis', r'brachialis'),
+    ('triceps_long', r'long head of triceps'),
+    ('triceps_lat', r'lateral head of triceps'),
+    ('triceps_med', r'medial head of triceps'),
+    ('anconeus', r'anconeus'),
+    ('brachioradialis', r'brachioradialis'),
+    ('finger_ext', r'extensor digitorum|extensor digiti minimi|extensor indicis|extensor pollicis|abductor pollicis longus'),
+    ('hand', r'of hand|pollicis brevis|opponens pollicis|adductor pollicis|retinaculum of wrist'),
+    ('wrist_ext', r'extensor carpi'),
+    ('finger_flex', r'flexor digitorum (superficialis|profundus)|flexor pollicis longus'),
+    ('wrist_flex', r'flexor carpi|palmaris longus|pronator teres'),
+    ('forearm_deep', r'supinator|pronator quadratus|interosseous membrane of forearm'),
+    # neck
+    ('scm', r'sternocleidomastoid'),
+    ('scalenes', r'scalenus'),
+    ('levator', r'levator scapulae'),
+    ('splenius', r'splenius'),
+    ('suboccipitals', r'rectus capitis posterior|obliquus capitis'),
+    ('neck_flexors', r'longus colli|longus capitis|rectus capitis (anterior|lateralis)'),
+    ('neck_rotators', r'cervical rotator|interspinales cervicis|cervical intertransversarii'),
+    ('neck_extensors', r'semispinalis|longissimus (capitis|cervicis)|iliocostalis cervicis|spinalis cervicis'),
+    ('hyoids', r'hyoid|sternothyroid|digastric'),
 ]
-SKIP = r'papillary|diaphragm|sphincter|coccygeus|puborectalis|levator ani|platysma|pterygoid|transversus thoracis|innermost intercostal|internal intercostal|levatores|hair|eyebrow|skin|interosseous membrane of leg'
-TENDON = r'aponeurosis|calcaneal tendon|iliotibial|linea alba|retinaculum|inguinal|intermediate tendon|plantar ligament|interosseous membrane'
+SKIP = r'papillary|sphincter|platysma|pterygoid|transversus thoracis|innermost intercostal|internal intercostal|hair|eyebrow|skin|interosseous membrane of leg|tendinous arch|intermediate tendon'
+TENDON = r'aponeurosis|calcaneal tendon|iliotibial|linea alba|retinaculum|inguinal|plantar ligament|interosseous membrane'
 EXTRA_BONE = r'cartilage|tooth|eyeball|^ear$'
-EXTRA_MUSCLE = r'trapezius|extensor carpi ulnaris|interossei|lumbricals|spinalis cervicis|intertransversari|interspinales'
 
 def classify(i):
     name = (names.get(i) or fma.get(i) or '').lower()
     base = re.sub(r'\b(left|right) ', '', name)
     if not name or re.search(SKIP, base):
         return None
+    for mid, pat in MUSCLE_RULES:
+        if re.search(pat, base):
+            kind = 'tendon' if re.search(TENDON, base) else 'muscle'
+            return dict(id=i, name=name, kind=kind, muscle=mid)
     anc = ancestors(i)
-    is_muscle = any('muscle' in a for a in anc) or re.search(EXTRA_MUSCLE, base)
-    is_tendon = re.search(TENDON, base)
-    is_bone = any(re.search(r'\bbone\b|skeleton|vertebra', a) for a in anc) or re.search(EXTRA_BONE, base)
-    if is_tendon:
-        kind = 'tendon'
-    elif is_muscle:
-        kind = 'muscle'
-    elif is_bone:
-        kind = 'eye' if 'eyeball' in base else 'bone'
-    else:
-        return None
-    region = None
-    if kind != 'bone' and kind != 'eye':
-        for rid, pat in REGION_RULES:
-            if re.search(pat, base):
-                region = rid
-                break
-    return dict(id=i, name=name, kind=kind, region=region)
+    if any('muscle' in a for a in anc):
+        return dict(id=i, name=name, kind='muscle', muscle=None)  # face / head
+    if any(re.search(r'\bbone\b|skeleton|vertebra', a) for a in anc) or re.search(EXTRA_BONE, base):
+        return dict(id=i, name=name, kind='eye' if 'eyeball' in base else 'bone', muscle=None)
+    return None
 
 # ---------------------------------------------------------------- load
 parts = []
@@ -106,7 +169,7 @@ for f in sorted(os.listdir(STL)):
     c['mesh'] = m
     c['area'] = float(m.area)
     parts.append(c)
-    print(f"{c['kind']:7}{str(c['region']):11}{len(m.faces):8}  {c['name']}", flush=True)
+    print(f"{c['kind']:7}{str(c['muscle']):16}{len(m.faces):8}  {c['name']}", flush=True)
 
 def budgeted(kinds, budget):
     group = [p for p in parts if p['kind'] in kinds]
@@ -175,8 +238,10 @@ for p in parts:
         perp, tendon = np.zeros((len(v), 2)), np.zeros(len(v))
     cx = v[:, 0].mean()
     side = 'c' if abs(cx) < 0.012 and v[:, 0].min() < -0.004 and v[:, 0].max() > 0.004 else ('l' if cx > 0 else 'r')
-    key = (p['region'] or p['kind'] if p['kind'] in ('bone', 'eye') or p['region'] else 'face', side,
-           'bone' if p['kind'] == 'bone' else 'eye' if p['kind'] == 'eye' else 'muscle')
+    if p['kind'] in ('bone', 'eye'):
+        key = (p['kind'], side, p['kind'])
+    else:
+        key = (p['muscle'] or 'face', side, 'muscle')
     g = groups.setdefault(key, dict(v=[], f=[], perp=[], tendon=[], n=0, names=[]))
     g['f'].append(f + g['n'])
     g['v'].append(v); g['perp'].append(perp); g['tendon'].append(tendon)
@@ -202,10 +267,10 @@ def push(arr):
     return off
 
 tris = 0
-for (region, side, kind), g in sorted(groups.items()):
+for (muscle, side, kind), g in sorted(groups.items()):
     v = np.concatenate(g['v']); f = np.concatenate(g['f'])
     q = np.round((v - lo) / size * 65535).astype(np.uint16)
-    entry = dict(region=None if region in ('bone', 'eye', 'face') else region, side=side, kind=kind,
+    entry = dict(muscle=None if muscle in ('bone', 'eye', 'face') else muscle, side=side, kind=kind,
                  verts=len(v), tris=len(f), pos=push(q))
     if kind == 'muscle':
         perp = np.concatenate(g['perp'])
@@ -215,7 +280,7 @@ for (region, side, kind), g in sorted(groups.items()):
     entry['idx'] = push(f.astype(np.uint32 if entry['index32'] else np.uint16))
     header['meshes'].append(entry)
     tris += len(f)
-    print(f"{str(region):11}{side} {kind:7}{len(v):8} verts {len(f):8} tris  ({len(g['names'])} parts)")
+    print(f"{str(muscle):16}{side} {kind:7}{len(v):8} verts {len(f):8} tris  ({len(g['names'])} parts)")
 
 hj = json.dumps(header, separators=(',', ':')).encode()
 hj += b' ' * (-len(hj) % 4)
