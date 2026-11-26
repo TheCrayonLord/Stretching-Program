@@ -3,7 +3,15 @@
 An interactive stretching and exercise guide built around a 3D figure drawn in
 the style of a muscular-system anatomy chart.
 
-- **Two tabs** – *Stretches* and *Exercises* share the same body and search.
+- **Three tabs** – *Stretches*, *Exercises* and *Routines* share the same body
+  and search.
+- **Routines** – 14 ready-made routines filtered by goal (desk & posture, back
+  pain, running, flexibility, strength, core), plus your own: tap **+ Routine**
+  on any stretch or exercise, then reorder, rename or copy. Your routines are
+  saved in the browser.
+- **Guided player** – press Start and it walks you through each step with a
+  countdown for holds, left/right sides, sets and rest, beeps, pause and skip,
+  while the body highlights the muscles for the current step.
 - **Tap a muscle** – the camera swings round to face it and the muscle group
   glows. Inside a group, tap again (or tap a muscle name) to focus on a single
   muscle.
@@ -31,7 +39,8 @@ served over HTTP rather than opened from the file system:
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-It also works as-is on GitHub Pages.
+It also works as-is on GitHub Pages, where it can be installed to a phone's
+home screen and works offline after the first visit (`sw.js`).
 
 ## Layout
 
@@ -40,6 +49,8 @@ It also works as-is on GitHub Pages.
 | `js/data.js` | Muscle groups, search aliases and stretches |
 | `js/muscles.js` | The 87 selectable muscles: name, group and whether they sit deep |
 | `js/exercises.js` | Exercises with type, equipment and primary / secondary muscles |
+| `js/routines.js` | Ready-made routines, timing rules and saved routines |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Install-to-home-screen and offline support |
 | `js/body.js` | Loads the anatomical model and shades fibres and tendons |
 | `assets/body.bin` | The 3D model: ~300 real muscles and the skeleton, grouped into the 87 muscles |
 | `tools/build_model.py` | Rebuilds `assets/body.bin` from the BodyParts3D STL files |

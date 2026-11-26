@@ -4,6 +4,9 @@ import { loadBody } from './body.js';
 import { REGIONS, REGION_BY_ID } from './data.js';
 import { MUSCLES, MUSCLES_BY_REGION } from './muscles.js';
 import { EXERCISES, EXERCISE_BY_ID, EQUIPMENT } from './exercises.js';
+import {
+  GOALS, READY, resolveStep, routineMinutes, stretchRef, exerciseRef, loadMine, saveMine, newId,
+} from './routines.js';
 
 const canvas = document.getElementById('scene');
 const stage = document.getElementById('stage');
@@ -14,6 +17,8 @@ const searchEl = document.getElementById('q');
 const filtersEl = document.getElementById('filters');
 const legendEl = document.getElementById('legend');
 const peelBtn = document.getElementById('peel');
+const toastEl = document.getElementById('toast');
+const sheetEl = document.getElementById('sheet');
 
 /* ---------- scene ---------- */
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -37,7 +42,11 @@ scene.add(camera);
 const loading = document.getElementById('loading');
 let body;
 try {
-  body = await loadBody();
+  body = await loadBody((got, total) => {
+    loading.textContent = total
+      ? `Loading anatomy… ${Math.round((got / total) * 100)}%`
+      : `Loading anatomy… ${(got / 1e6).toFixed(1)} MB`;
+  });
   loading.remove();
 } catch (err) {
   loading.textContent = 'Could not load the 3D model. Serve this folder over HTTP and reload.';
@@ -150,12 +159,17 @@ const store = {
   set(k, v) { try { localStorage.setItem(`stretchAtlas.${k}`, JSON.stringify(v)); } catch { /* storage unavailable */ } },
 };
 const state = {
-  tab: store.get('tab', 'stretch'),          // 'stretch' | 'exercise'
+  tab: store.get('tab', 'stretch'),          // 'stretch' | 'exercise' | 'routine'
+  goal: store.get('goal', ''),               // routine goal filter, '' = all
   equip: new Set(store.get('equip', [])),    // empty = any equipment
-  view: { kind: 'list' },                    // list | region {id, spot} | exercise {id, from}
+  view: { kind: 'list' },                    // list | region | exercise | routine {id, step} | player {id}
   peel: false,                               // manual "deep layer" toggle
 };
-if (!['stretch', 'exercise'].includes(state.tab)) state.tab = 'stretch';
+if (!['stretch', 'exercise', 'routine'].includes(state.tab)) state.tab = 'stretch';
+let mine = loadMine();
+const getRoutine = (id) => mine.find((r) => r.id === id) || READY.find((r) => r.id === id);
+const isMine = (id) => mine.some((r) => r.id === id);
+const stepsOf = (r) => r.steps.map(resolveStep).filter(Boolean);
 
 const regionMuscles = (id) => MUSCLES_BY_REGION[id] || [];
 const allowed = (ex) => !state.equip.size || ex.equipment.some((e) => state.equip.has(e));
@@ -183,10 +197,17 @@ function computeHighlight() {
     for (const id of ex.secondary) highlight.set(id, 0.5);
     for (const id of ex.primary) highlight.set(id, 1);
     autoPeel = ex.primary.filter((id) => MUSCLES[id].deep).length * 2 >= ex.primary.length;
+  } else if (v.kind === 'routine' || v.kind === 'player') {
+    const steps = stepsOf(getRoutine(v.id));
+    const idx = v.kind === 'player' ? player?.i : v.step;
+    const focus = idx != null && steps[idx] ? [steps[idx]] : steps;
+    for (const st of focus) for (const id of st.secondary) if (!highlight.has(id)) highlight.set(id, 0.5);
+    for (const st of focus) for (const id of st.primary) highlight.set(id, 1);
+    if (focus.length === 1) autoPeel = focus[0].primary.filter((id) => MUSCLES[id].deep).length * 2 > focus[0].primary.length;
   }
   const peeling = autoPeel || state.peel;
   stage.classList.toggle('peeled', peeling);
-  legendEl.hidden = v.kind !== 'exercise';
+  legendEl.hidden = !(v.kind === 'exercise' || ((v.kind === 'routine' || v.kind === 'player') && [...highlight.values()].includes(0.5)));
 }
 
 const WHITE = new THREE.Color(0xffffff);
@@ -225,6 +246,7 @@ function paint(time) {
 /* ---------- navigation ---------- */
 function show(view, { fly = true } = {}) {
   state.view = view;
+  document.getElementById('panel').classList.toggle('playing', view.kind === 'player');
   computeHighlight();
   stage.classList.toggle('focused', view.kind !== 'list');
   if (view.kind === 'list') {
@@ -238,11 +260,22 @@ function show(view, { fly = true } = {}) {
       else focusMuscles(regionMuscles(view.id), REGION_BY_ID[view.id].view);
     }
     renderRegion(REGION_BY_ID[view.id], view.spot);
-  } else {
+  } else if (view.kind === 'exercise') {
     const ex = EXERCISE_BY_ID[view.id];
     if (fly) focusMuscles(ex.primary, viewFor(ex.primary));
     renderExercise(ex, view.from);
+  } else if (view.kind === 'routine') {
+    const r = getRoutine(view.id);
+    if (!r) return show({ kind: 'list' });
+    const st = view.step != null ? stepsOf(r)[view.step] : null;
+    if (fly) st ? focusStep(st) : goHome('front');
+    renderRoutine(r, view.step);
+  } else if (view.kind === 'player') {
+    renderPlayer();
   }
+}
+function focusStep(st) {
+  focusMuscles(st.primary, st.kind === 'stretch' ? st.region.view : viewFor(st.primary));
 }
 const openRegion = (id, opts) => show({ kind: 'region', id }, opts);
 
@@ -250,9 +283,13 @@ function setTab(tab) {
   state.tab = tab;
   store.set('tab', tab);
   for (const b of document.querySelectorAll('.tabs button')) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
-  filtersEl.hidden = tab !== 'exercise';
+  if (player) stopPlayer();
+  renderFilters();
+  filtersEl.hidden = tab === 'stretch';
   const v = state.view;
-  if (v.kind === 'exercise') show({ kind: 'region', id: v.from || MUSCLES[EXERCISE_BY_ID[v.id].primary[0]].region }, { fly: false });
+  if (tab === 'routine') show(v.kind === 'routine' ? v : { kind: 'list' }, { fly: v.kind !== 'list' });
+  else if (v.kind === 'routine' || v.kind === 'player') show({ kind: 'list' });
+  else if (v.kind === 'exercise') show({ kind: 'region', id: v.from || MUSCLES[EXERCISE_BY_ID[v.id].primary[0]].region }, { fly: false });
   else show(v, { fly: false });
 }
 
@@ -272,6 +309,8 @@ function pick(ev) {
 }
 
 function tapMuscle(id) {
+  if (state.view.kind === 'player') return; // don't leave a workout by accident
+  if (state.tab === 'routine') { state.view = { kind: 'list' }; setTab('stretch'); }
   const m = MUSCLES[id];
   const v = state.view;
   searchEl.value = '';
@@ -335,6 +374,14 @@ const EQUIP_LABEL = Object.fromEntries(EQUIPMENT);
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 function renderFilters() {
+  if (state.tab === 'routine') {
+    filtersEl.innerHTML = `<span class="filters-label" id="goal-label">Goal</span>
+      <div class="chips" role="group" aria-labelledby="goal-label">
+        <button type="button" class="chip" data-goal="" aria-pressed="${!state.goal}">All</button>
+        ${GOALS.map(([id, label]) => `<button type="button" class="chip" data-goal="${id}" aria-pressed="${state.goal === id}">${label}</button>`).join('')}
+      </div>`;
+    return;
+  }
   filtersEl.innerHTML = `<span class="filters-label" id="equip-label">Equipment</span>
     <div class="chips" role="group" aria-labelledby="equip-label">
       ${EQUIPMENT.map(([id, label]) => `<button type="button" class="chip" data-equip="${id}" aria-pressed="${state.equip.has(id)}">${label}</button>`).join('')}
@@ -377,10 +424,37 @@ function searchRegions(terms) {
   return out.sort((a, b) => a.rank - b.rank);
 }
 
+function routineRow(r) {
+  const steps = stepsOf(r);
+  const kinds = new Set(steps.map((s) => s.kind));
+  const what = kinds.size === 2 ? 'steps' : kinds.has('exercise') ? 'exercises' : 'stretches';
+  const goals = (r.goals || []).map((g) => `<i>${esc(GOALS.find(([id]) => id === g)[1])}</i>`).join('');
+  return `<button class="row" type="button" data-routine="${r.id}">
+      <b>${esc(r.name)}</b>
+      <span>${steps.length ? `${steps.length} ${what} · about ${routineMinutes(steps)} min` : 'Empty, add stretches or exercises'}</span>
+      ${goals ? `<span class="tags">${goals}</span>` : ''}
+    </button>`;
+}
+
+function renderRoutineList(terms) {
+  const match = (r) => !terms.length || terms.every((t) => `${r.name} ${r.about || ''} ${stepsOf(r).map((s) => s.name).join(' ')}`.toLowerCase().includes(t));
+  const myList = mine.filter(match);
+  const ready = READY.filter((r) => (!state.goal || r.goals.includes(state.goal)) && match(r));
+  listEl.innerHTML = `
+    <h3 class="section">My routines</h3>
+    ${myList.map(routineRow).join('')}
+    ${terms.length ? '' : `<div class="pad"><button type="button" class="ghost-btn" data-act="new">+ New routine</button>
+      ${mine.length ? '' : '<p class="note">Build your own: tap <b>+ Routine</b> on any stretch or exercise. Saved in this browser.</p>'}</div>`}
+    <h3 class="section">Ready-made${state.goal ? ` · ${esc(GOALS.find(([id]) => id === state.goal)[1])}` : ''}</h3>
+    ${ready.map(routineRow).join('') || '<p class="empty">No ready-made routines match.</p>'}
+    <div class="empty">${CREDIT}</div>`;
+}
+
 function renderList() {
   detailEl.hidden = true;
   listEl.hidden = false;
   const terms = searchEl.value.toLowerCase().split(/\s+/).filter(Boolean);
+  if (state.tab === 'routine') return renderRoutineList(terms);
   if (!terms.length) {
     listEl.innerHTML = `
       <h3 class="section">Muscle groups</h3>
@@ -419,7 +493,10 @@ function renderRegion(region, spot) {
         <h3>${esc(st.name)}</h3>
         <span class="hold">${esc(st.hold)}</span>
         <p>${esc(st.how)}</p>
-        <a href="${esc(st.url)}" target="_blank" rel="noopener">Watch on YouTube</a>
+        <div class="card-actions">
+          <a href="${esc(st.url)}" target="_blank" rel="noopener">Watch on YouTube</a>
+          <button type="button" class="add" data-add="${esc(stretchRef(region.id, st.name))}">+ Routine</button>
+        </div>
       </section>`).join('')
       + '<p class="note">Ease into each stretch and stop if you feel sharp pain. Video links open a YouTube search for the stretch.</p>';
   } else {
@@ -460,10 +537,343 @@ function renderExercise(ex, from) {
       <h3>How to do it</h3>
       <span class="hold">${esc(ex.dose)}</span>
       <p>${esc(ex.how)}</p>
-      <a href="${esc(ex.url)}" target="_blank" rel="noopener">Watch on YouTube</a>
+      <div class="card-actions">
+        <a href="${esc(ex.url)}" target="_blank" rel="noopener">Watch on YouTube</a>
+        <button type="button" class="add" data-add="${esc(exerciseRef(ex.name))}">+ Routine</button>
+      </div>
     </section>
     <p class="note">Sets × reps are a starting point. Use a weight you can control with good form.</p>
     ${CREDIT}`;
+}
+
+/* ---------- routines ---------- */
+const typeTag = (st) => st.kind === 'stretch' ? '<i class="type stretch-tag">Stretch</i>'
+  : `<i class="type ${st.ex.type}">${st.ex.type === 'compound' ? 'Compound' : 'Isolation'}</i>`;
+let confirmDelete = false;
+let renaming = false;
+
+function renderRoutine(r, preview) {
+  listEl.hidden = true;
+  detailEl.hidden = false;
+  const own = isMine(r.id);
+  const steps = stepsOf(r);
+  const title = renaming && own
+    ? `<form class="rename" data-form="rename"><input id="rename-input" value="${esc(r.name)}" maxlength="40" aria-label="Routine name" autocomplete="off"><button type="submit" class="ghost-btn">Save</button></form>`
+    : `<h2>${esc(r.name)}</h2>`;
+  detailEl.innerHTML = `
+    <button class="back" type="button" data-nav="list">&larr; All routines</button>
+    ${title}
+    ${r.about ? `<p class="hint">${esc(r.about)}</p>` : ''}
+    <p class="meta">${steps.length ? `${plural(steps.length, 'step')} · about ${routineMinutes(steps)} min` : 'No steps yet'}</p>
+    <div class="routine-actions">
+      ${steps.length ? '<button type="button" class="start-btn" data-act="start">&#9654; Start</button>' : ''}
+      ${own
+        ? `<button type="button" class="ghost-btn" data-act="rename">Rename</button>
+           <button type="button" class="ghost-btn danger" data-act="delete">${confirmDelete ? 'Tap again to delete' : 'Delete'}</button>`
+        : '<button type="button" class="ghost-btn" data-act="copy">Copy to my routines</button>'}
+    </div>
+    ${steps.length ? `<p class="hint">Tap a step to see the muscles it works.</p>
+    <ol class="steps">
+      ${steps.map((st, i) => `<li class="step${preview === i ? ' on' : ''}">
+          <button type="button" class="step-main" data-act="preview" data-i="${i}" aria-pressed="${preview === i}">
+            <b>${esc(st.name)}</b>
+            <span class="tags">${typeTag(st)}<i>${esc(st.dose)}</i></span>
+          </button>
+          ${own ? `<span class="step-tools">
+            <button type="button" data-act="up" data-i="${i}" aria-label="Move ${esc(st.name)} up" ${i ? '' : 'disabled'}>&uarr;</button>
+            <button type="button" data-act="down" data-i="${i}" aria-label="Move ${esc(st.name)} down" ${i < steps.length - 1 ? '' : 'disabled'}>&darr;</button>
+            <button type="button" data-act="remove" data-i="${i}" aria-label="Remove ${esc(st.name)}">&times;</button>
+          </span>` : ''}
+        </li>`).join('')}
+    </ol>` : `<p class="empty">Add stretches or exercises with the <b>+ Routine</b> button on any stretch card or exercise page.</p>`}
+    ${own ? '<p class="note">Your routines are saved in this browser.</p>' : ''}
+    ${CREDIT}`;
+  if (renaming) { const inp = detailEl.querySelector('#rename-input'); inp.focus(); inp.select(); }
+}
+
+function updateMine(id, fn) {
+  const r = mine.find((x) => x.id === id);
+  if (!r) return;
+  fn(r);
+  saveMine(mine);
+}
+
+function createRoutine(name, steps = []) {
+  const n = mine.length + 1;
+  const r = { id: newId(), name: name || `My routine ${n}`, steps };
+  mine.push(r);
+  saveMine(mine);
+  return r;
+}
+
+let toastTimer;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2200);
+}
+
+/* add-to-routine sheet */
+let sheetRef = null;
+function openSheet(ref) {
+  sheetRef = ref;
+  const st = resolveStep(ref);
+  sheetEl.innerHTML = `
+    <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <h3 id="sheet-title">Add “${esc(st.name)}” to…</h3>
+      <div class="sheet-list">
+        ${mine.map((r) => {
+          const has = r.steps.includes(ref);
+          return `<button type="button" class="row" data-pick="${r.id}" ${has ? 'aria-disabled="true"' : ''}><b>${esc(r.name)}</b><span>${has ? 'Already added' : plural(r.steps.length, 'step')}</span></button>`;
+        }).join('')}
+      </div>
+      <form class="rename" data-form="new-routine">
+        <input id="new-routine-name" placeholder="New routine name" maxlength="40" aria-label="New routine name" autocomplete="off">
+        <button type="submit" class="start-btn">Create &amp; add</button>
+      </form>
+      <button type="button" class="ghost-btn" data-close="1">Cancel</button>
+    </div>`;
+  sheetEl.hidden = false;
+  (sheetEl.querySelector('[data-pick]:not([aria-disabled])') || sheetEl.querySelector('input')).focus();
+}
+function closeSheet() { sheetEl.hidden = true; sheetEl.innerHTML = ''; sheetRef = null; }
+sheetEl.addEventListener('click', (ev) => {
+  if (ev.target === sheetEl || ev.target.closest('[data-close]')) return closeSheet();
+  const b = ev.target.closest('[data-pick]');
+  if (!b || b.getAttribute('aria-disabled')) return;
+  const ref = sheetRef;
+  updateMine(b.dataset.pick, (r) => r.steps.push(ref));
+  toast(`Added to ${getRoutine(b.dataset.pick).name}`);
+  closeSheet();
+});
+sheetEl.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const r = createRoutine(sheetEl.querySelector('#new-routine-name').value.trim(), [sheetRef]);
+  toast(`Added to ${r.name}`);
+  closeSheet();
+});
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !sheetEl.hidden) closeSheet(); });
+
+function routineAction(act, i) {
+  const v = state.view;
+  const r = getRoutine(v.id);
+  if (act !== 'delete') confirmDelete = false;
+  if (act === 'preview') return show({ kind: 'routine', id: v.id, step: v.step === i ? null : i });
+  if (act === 'start') return startPlayer(v.id);
+  if (act === 'copy') {
+    const c = createRoutine(`${r.name} (my copy)`, [...r.steps]);
+    toast('Copied to My routines');
+    return show({ kind: 'routine', id: c.id }, { fly: false });
+  }
+  if (act === 'rename') { renaming = true; return renderRoutine(r, v.step); }
+  if (act === 'delete') {
+    if (!confirmDelete) { confirmDelete = true; return renderRoutine(r, v.step); }
+    confirmDelete = false;
+    mine = mine.filter((x) => x.id !== r.id);
+    saveMine(mine);
+    toast('Routine deleted');
+    return show({ kind: 'list' });
+  }
+  if (act === 'up' || act === 'down' || act === 'remove') {
+    updateMine(r.id, (x) => {
+      if (act === 'remove') x.steps.splice(i, 1);
+      else {
+        const j = act === 'up' ? i - 1 : i + 1;
+        [x.steps[i], x.steps[j]] = [x.steps[j], x.steps[i]];
+      }
+    });
+    return show({ kind: 'routine', id: r.id }, { fly: false });
+  }
+}
+
+detailEl.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  if (ev.target.dataset.form !== 'rename') return;
+  const name = detailEl.querySelector('#rename-input').value.trim();
+  if (name) updateMine(state.view.id, (r) => { r.name = name; });
+  renaming = false;
+  show(state.view, { fly: false });
+});
+
+/* ---------- guided player ---------- */
+let player = null;
+let audio = null;
+let wakeLock = null;
+const READY_SECS = 5;
+
+function beep(freq = 880, dur = 0.12) {
+  if (!audio) return;
+  try {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.18, audio.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dur);
+    o.connect(g).connect(audio.destination);
+    o.start();
+    o.stop(audio.currentTime + dur);
+  } catch { /* audio unavailable */ }
+}
+
+async function startPlayer(id) {
+  try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); await audio.resume(); } catch { audio = null; }
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch { wakeLock = null; }
+  player = { id, steps: stepsOf(getRoutine(id)), i: 0, set: 1, side: 1, phase: 'ready', endsAt: 0, left: 0, paused: false, timer: null };
+  state.view = { kind: 'player', id };
+  document.getElementById('panel').classList.add('playing');
+  enterStep(0);
+  player.timer = setInterval(tick, 200);
+}
+
+function stopPlayer() {
+  if (!player) return;
+  clearInterval(player.timer);
+  player = null;
+  try { wakeLock?.release(); } catch { /* ignore */ }
+  wakeLock = null;
+}
+
+function setPhase(phase, secs) {
+  player.phase = phase;
+  player.endsAt = secs ? performance.now() + secs * 1000 : 0;
+  player.left = secs ? secs * 1000 : 0;
+  player.paused = false;
+  renderPlayer();
+}
+
+function enterStep(i) {
+  player.i = i;
+  player.set = 1;
+  player.side = 1;
+  computeHighlight();
+  focusStep(player.steps[i]);
+  setPhase('ready', READY_SECS);
+}
+
+function startWork() {
+  const st = player.steps[player.i];
+  beep(1175, 0.2);
+  setPhase('work', st.secs || 0);
+}
+
+function finishWork() {
+  const st = player.steps[player.i];
+  if (player.side < st.sides) { player.side++; return setPhase('ready', READY_SECS); }
+  if (player.set < st.sets) { player.set++; player.side = 1; beep(660, 0.25); return setPhase('rest', st.kind === 'exercise' ? st.rest : st.rest); }
+  nextStep();
+}
+
+function nextStep() {
+  if (player.i < player.steps.length - 1) { beep(660, 0.25); return enterStep(player.i + 1); }
+  beep(988, 0.15); setTimeout(() => beep(1319, 0.3), 180);
+  player.phase = 'done';
+  clearInterval(player.timer);
+  renderPlayer();
+}
+
+function tick() {
+  if (!player || player.paused || !player.endsAt) return;
+  const left = player.endsAt - performance.now();
+  const secs = Math.ceil(left / 1000);
+  if (secs !== player.lastSecs) {
+    player.lastSecs = secs;
+    if (secs > 0 && secs <= 3) beep(880, 0.08);
+  }
+  if (left <= 0) {
+    if (player.phase === 'ready' || player.phase === 'rest') return player.phase === 'rest' ? setPhase('ready', 3) : startWork();
+    if (player.phase === 'work') return finishWork();
+  }
+  updateClock(left);
+}
+
+const fmt = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+function updateClock(left) {
+  const el = detailEl.querySelector('#clock');
+  if (!el) return;
+  el.textContent = fmt(left);
+  const total = player.left || 1;
+  detailEl.querySelector('#clock-bar')?.style.setProperty('--p', String(1 - Math.max(0, left) / total));
+}
+
+function renderPlayer() {
+  if (!player) return;
+  listEl.hidden = true;
+  detailEl.hidden = false;
+  const r = getRoutine(player.id);
+  const n = player.steps.length;
+  if (player.phase === 'done') {
+    detailEl.innerHTML = `
+      <div class="player done">
+        <p class="eyebrow">${esc(r.name)}</p>
+        <h2>Routine complete</h2>
+        <p class="hint">${plural(n, 'step')} done. Nice work.</p>
+        <div class="routine-actions">
+          <button type="button" class="start-btn" data-p="again">Do it again</button>
+          <button type="button" class="ghost-btn" data-p="exit">Back to routine</button>
+        </div>
+      </div>`;
+    return;
+  }
+  const st = player.steps[player.i];
+  const nextSt = player.steps[player.i + 1];
+  const sideLabel = st.sides > 1 ? (player.side === 1 ? 'Left side' : 'Right side') : '';
+  const setLabel = st.sets > 1 ? `${st.kind === 'exercise' ? 'Set' : 'Round'} ${player.set} of ${st.sets}` : '';
+  const what = [setLabel, sideLabel].filter(Boolean).join(' · ');
+  let label, center, action = '';
+  if (player.phase === 'ready') {
+    label = player.set > 1 || player.side > 1 ? `Next: ${what}` : 'Get ready';
+    center = `<div id="clock" class="clock small">${fmt(player.left)}</div>`;
+    action = '<button type="button" class="ghost-btn" data-p="go">Start now</button>';
+  } else if (player.phase === 'rest') {
+    label = 'Rest';
+    center = `<div id="clock" class="clock">${fmt(player.left)}</div>`;
+    action = '<button type="button" class="ghost-btn" data-p="go">Skip rest</button>';
+  } else if (st.secs) {
+    label = st.kind === 'stretch' ? `Hold${what ? ` · ${what}` : ''}` : (what || 'Go');
+    center = `<div id="clock" class="clock">${fmt(player.left)}</div>`;
+  } else {
+    label = what || 'Go';
+    center = `<div class="clock reps">${esc(st.reps)}</div>`;
+    action = `<button type="button" class="start-btn" data-p="done">${st.kind === 'exercise' ? 'Set done' : 'Done'}</button>`;
+  }
+  detailEl.innerHTML = `
+    <div class="player">
+      <div class="player-top">
+        <p class="eyebrow">${esc(r.name)} · Step ${player.i + 1} of ${n}</p>
+        <button type="button" class="ghost-btn small" data-p="exit">End</button>
+      </div>
+      <div class="progress" aria-hidden="true"><span style="width:${(player.i / n) * 100}%"></span></div>
+      <h2>${esc(st.name)}</h2>
+      <span class="tags">${typeTag(st)}<i>${esc(st.dose)}</i></span>
+      <p class="phase">${esc(label)}</p>
+      <div id="clock-bar" class="clock-wrap${player.phase === 'work' && st.secs ? ' timed' : ''}">${center}</div>
+      <div class="player-controls">
+        <button type="button" class="round" data-p="prev" aria-label="Previous step" ${player.i ? '' : 'disabled'}>&#9198;</button>
+        ${player.endsAt ? `<button type="button" class="round big" data-p="pause" aria-label="${player.paused ? 'Resume' : 'Pause'}">${player.paused ? '&#9654;' : '&#10073;&#10073;'}</button>` : ''}
+        <button type="button" class="round" data-p="next" aria-label="Next step">&#9197;</button>
+      </div>
+      <div class="player-action">${action}</div>
+      <p class="how">${esc(st.how)}</p>
+      <a class="yt" href="${esc(st.url)}" target="_blank" rel="noopener">Watch on YouTube</a>
+      ${nextSt ? `<p class="up-next">Up next: <b>${esc(nextSt.name)}</b></p>` : '<p class="up-next">Last step</p>'}
+    </div>`;
+  updateClock(player.paused ? player.left : player.endsAt - performance.now());
+}
+
+function playerAction(a) {
+  if (a === 'exit') { const id = player?.id ?? state.view.id; stopPlayer(); return show({ kind: 'routine', id }); }
+  if (a === 'again') { const id = player.id; stopPlayer(); return startPlayer(id); }
+  if (!player) return;
+  if (a === 'go') return player.phase === 'rest' ? setPhase('ready', 3) : startWork();
+  if (a === 'done') return finishWork();
+  if (a === 'next') return nextStep();
+  if (a === 'prev') return enterStep(Math.max(0, player.i - 1));
+  if (a === 'pause') {
+    if (player.paused) { player.endsAt = performance.now() + player.left; player.paused = false; }
+    else { player.left = player.endsAt - performance.now(); player.paused = true; }
+    renderPlayer();
+  }
 }
 
 /* ---------- panel events ---------- */
@@ -481,14 +891,26 @@ function setEquip(id) {
   show(state.view, { fly: false });
 }
 filtersEl.addEventListener('click', (ev) => {
+  const g = ev.target.closest('[data-goal]');
+  if (g) {
+    state.goal = g.dataset.goal;
+    store.set('goal', state.goal);
+    renderFilters();
+    return show({ kind: 'list' }, { fly: false });
+  }
   const b = ev.target.closest('[data-equip]');
   if (b) setEquip(b.dataset.equip);
 });
 
 function onPanelClick(ev) {
-  const t = ev.target.closest('[data-region],[data-exercise],[data-muscle],[data-nav],[data-equip]');
-  if (!t) return;
+  const t = ev.target.closest('[data-region],[data-exercise],[data-muscle],[data-nav],[data-equip],[data-routine],[data-act],[data-add],[data-p]');
+  if (!t || t.disabled) return;
   const d = t.dataset;
+  if (d.p) return playerAction(d.p);
+  if (d.add) return openSheet(d.add);
+  if (d.act === 'new') { const r = createRoutine(); renaming = true; return show({ kind: 'routine', id: r.id }); }
+  if (d.act) return routineAction(d.act, d.i != null ? Number(d.i) : null);
+  if (d.routine) { searchEl.blur(); confirmDelete = false; renaming = false; return show({ kind: 'routine', id: d.routine }); }
   if (d.equip !== undefined) return setEquip(d.equip);
   if (d.region) { searchEl.blur(); return openRegion(d.region); }
   if (d.exercise) {
@@ -501,13 +923,16 @@ function onPanelClick(ev) {
     const v = state.view;
     return show({ kind: 'region', id: v.id, spot: v.spot === d.muscle ? null : d.muscle });
   }
-  if (d.nav === 'list') return show({ kind: 'list' });
+  if (d.nav === 'list') { renaming = false; confirmDelete = false; return show({ kind: 'list' }); }
   if (d.nav.startsWith('region:')) return openRegion(d.nav.slice(7));
 }
 listEl.addEventListener('click', onPanelClick);
 detailEl.addEventListener('click', onPanelClick);
 
-searchEl.addEventListener('input', () => show({ kind: 'list' }, { fly: false }));
+searchEl.addEventListener('input', () => {
+  if (state.view.kind === 'player') return;
+  show({ kind: 'list' }, { fly: false });
+});
 searchEl.addEventListener('keydown', (ev) => {
   if (ev.key !== 'Enter') return;
   const first = listEl.querySelector('.row');
@@ -525,7 +950,6 @@ function resize() {
 new ResizeObserver(resize).observe(stage);
 resize();
 
-renderFilters();
 setTab(state.tab);
 goHome('front', 0);
 
@@ -541,4 +965,10 @@ window.stretchAtlas = {
   show, setTab, goHome,
   select: (id) => openRegion(id),
   exercise: (name) => show({ kind: 'exercise', id: EXERCISES.find((e) => e.name === name).id, from: null }),
+  routine: (id) => { setTab('routine'); show({ kind: 'routine', id }); },
 };
+
+// offline support when hosted (ignored where service workers aren't allowed)
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !globalThis.STRETCH_ATLAS_MODEL) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* not available here */ });
+}

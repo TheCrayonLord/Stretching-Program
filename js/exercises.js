@@ -29,15 +29,15 @@ const ex = (name, type, equipment, primary, secondary, how, dose) =>
 ex('Bench Press', 'c', 'barbell dumbbell', 'pec_major', `upper_pec front_delt ${TRI}`, 'Lie on a bench with feet planted, lower the bar to the mid-chest with elbows about 45° from the body, then press back up.', '3–4 × 6–10');
 ex('Incline Dumbbell Press', 'c', 'dumbbell barbell', 'upper_pec', `pec_major front_delt ${TRI}`, 'On a bench set to 30–45°, lower the dumbbells beside the upper chest and press them up and slightly together.', '3 × 8–12');
 ex('Push-Up', 'c', 'bodyweight', 'pec_major', `upper_pec front_delt ${TRI} serratus_ant rectus_abs`, 'Hands just wider than shoulders, body in one straight line. Lower the chest to the floor and push back up.', '3 × 10–20');
-ex('Dips', 'c', 'bodyweight', `pec_major ${TRI}`, 'front_delt pec_minor upper_pec', 'Support yourself on parallel bars, lean slightly forward and lower until the shoulders are just below the elbows, then press up.', '3 × 6–12');
-ex('Dumbbell Fly', 'i', 'dumbbell cable machine', 'pec_major upper_pec', 'front_delt biceps', 'Lie on a bench with a slight bend in the elbows and open the arms wide in an arc, then squeeze them back together over the chest.', '3 × 10–15');
+ex('Dips', 'c', 'bodyweight', `pec_major ${TRI}`, 'front_delt pec_minor upper_pec subclavius', 'Support yourself on parallel bars, lean slightly forward and lower until the shoulders are just below the elbows, then press up.', '3 × 6–12');
+ex('Dumbbell Fly', 'i', 'dumbbell cable machine', 'pec_major upper_pec', 'front_delt biceps coracobrachialis', 'Lie on a bench with a slight bend in the elbows and open the arms wide in an arc, then squeeze them back together over the chest.', '3 × 10–15');
 ex('Cable Crossover', 'i', 'cable band', 'pec_major', 'upper_pec front_delt', 'Stand between two cables set high and sweep the hands down and together in front of the hips.', '3 × 12–15');
 ex('Low-to-High Cable Fly', 'i', 'cable band', 'upper_pec', 'pec_major front_delt', 'With cables set low, sweep the hands up and together to chin height, keeping a soft bend in the elbows.', '3 × 12–15');
 
 /* ---------- shoulders ---------- */
 ex('Overhead Press', 'c', 'barbell dumbbell kettlebell', 'front_delt side_delt', `${TRI} upper_trap serratus_ant upper_pec`, 'Stand tall with glutes and abs tight and press the weight from the shoulders to straight overhead.', '3–4 × 6–10');
 ex('Lateral Raise', 'i', 'dumbbell cable band', 'side_delt', 'upper_trap supraspinatus front_delt', 'With a slight bend in the elbows, raise the arms out to the sides until they are level with the shoulders.', '3 × 12–20');
-ex('Front Raise', 'i', 'dumbbell cable band', 'front_delt', 'upper_pec side_delt', 'Lift the weight straight in front of you to shoulder height and lower it slowly.', '3 × 10–15');
+ex('Front Raise', 'i', 'dumbbell cable band', 'front_delt', 'upper_pec side_delt coracobrachialis', 'Lift the weight straight in front of you to shoulder height and lower it slowly.', '3 × 10–15');
 ex('Rear Delt Fly', 'i', 'dumbbell cable machine band', 'rear_delt', 'mid_trap rhomboids infraspinatus teres_minor', 'Hinge forward with a flat back and open the arms out to the sides, leading with the elbows.', '3 × 12–20');
 ex('Face Pull', 'c', 'cable band', 'rear_delt infraspinatus teres_minor', 'mid_trap lower_trap rhomboids', 'Pull a rope from face height toward your forehead, splitting the ends and rotating the hands back so the knuckles point up.', '3 × 12–15');
 ex('Upright Row', 'c', 'barbell dumbbell cable', 'side_delt upper_trap', 'front_delt biceps', 'Pull the weight up close to the body to lower-chest height, leading with the elbows.', '3 × 10–12');
@@ -107,7 +107,7 @@ ex('Suitcase Carry', 'c', 'dumbbell kettlebell', 'ql ext_oblique int_oblique', '
 ex('Dead Bug', 'c', 'bodyweight', 'transverse_abs rectus_abs', 'int_oblique psoas diaphragm', 'On your back with arms up and knees over hips, lower the opposite arm and leg while the lower back stays down.', '3 × 8 each side');
 ex('Bird Dog', 'c', 'bodyweight', 'multifidus erectors', 'glute_max glute_med transverse_abs rear_delt', 'On all fours, reach one arm forward and the opposite leg back without the hips rotating.', '3 × 8 each side');
 ex('Stomach Vacuum', 'i', 'bodyweight', 'transverse_abs', 'diaphragm int_oblique', 'Exhale fully, then draw the belly button in toward the spine and hold while breathing shallowly.', '5 × 15–20 s');
-ex('Crocodile Breathing', 'i', 'bodyweight', 'diaphragm', 'intercostals transverse_abs pelvic_floor', 'Lie face down, forehead on your hands, and breathe so the lower back and sides rise against gravity.', '5 min');
+ex('Crocodile Breathing', 'i', 'bodyweight', 'diaphragm', 'intercostals transverse_abs pelvic_floor serratus_post', 'Lie face down, forehead on your hands, and breathe so the lower back and sides rise against gravity.', '5 min');
 ex('Pelvic Floor Contractions', 'i', 'bodyweight', 'pelvic_floor', 'transverse_abs', 'Gently lift and squeeze the pelvic floor as if stopping urine flow, hold, then fully relax.', '3 × 10 (5 s hold)');
 ex('Heel Taps', 'i', 'bodyweight', 'transverse_abs', 'rectus_abs psoas', 'On your back with knees bent 90° in the air, lower one heel at a time to tap the floor while keeping the back flat.', '3 × 10 each side');
 
@@ -116,7 +116,7 @@ ex('Hip Thrust', 'i', 'barbell dumbbell bodyweight band machine', 'glute_max', `
 ex('Glute Bridge', 'i', 'bodyweight band', 'glute_max', 'biceps_fem erectors glute_med', 'Lying on your back with knees bent, lift the hips until shoulders, hips and knees line up.', '3 × 12–20');
 ex('Cable Kickback', 'i', 'cable band', 'glute_max', 'biceps_fem glute_med', 'Attach a cuff to the ankle and kick the leg straight back without arching the lower back.', '3 × 12–15 each side');
 ex('Side-Lying Hip Abduction', 'i', 'bodyweight band cable', 'glute_med tfl', 'glute_min', 'Lie on your side and lift the top leg up and slightly back, keeping the toes pointing forward.', '3 × 15 each side');
-ex('Lateral Band Walk', 'i', 'band', 'glute_med tfl', 'glute_min glute_max', 'With a band around the knees or ankles, take small side steps in a half squat.', '3 × 12 steps each way');
+ex('Lateral Band Walk', 'i', 'band', 'glute_med tfl', 'glute_min glute_max it_band', 'With a band around the knees or ankles, take small side steps in a half squat.', '3 × 12 steps each way');
 ex('Hip Abduction Machine', 'i', 'machine cable band', 'glute_med tfl', 'glute_min', 'Sit in the machine and push the knees outward against the pads, then return slowly.', '3 × 15');
 ex('Clamshell', 'i', 'band bodyweight', 'piriformis gemelli obturators quadratus_fem glute_med', 'glute_min', 'Lie on your side with knees bent and feet together, and open the top knee without rolling the pelvis back.', '3 × 15 each side');
 ex('Fire Hydrant', 'i', 'bodyweight band', 'glute_med piriformis', 'glute_min gemelli glute_max', 'On all fours, lift one bent knee out to the side as high as you can without shifting your weight.', '3 × 12 each side');
@@ -132,8 +132,8 @@ ex('Walking Lunge', 'c', 'bodyweight dumbbell barbell', `${QUADS} glute_max`, 'g
 ex('Step-Up', 'c', 'dumbbell bodyweight barbell', 'glute_max vastus_lat vastus_med', 'rectus_fem glute_med soleus', 'Step onto a box and stand fully up, then step down slowly with the same leg.', '3 × 10 each side');
 ex('Leg Extension', 'i', 'machine band', QUADS, '', 'Sit in the machine and straighten the knees, pausing briefly at the top.', '3 × 12–15');
 ex('Romanian Deadlift', 'c', 'barbell dumbbell kettlebell', `${HAMS} glute_max`, 'erectors add_magnus finger_flex', 'With soft knees, push the hips back and slide the weight down the thighs until you feel the hamstrings stretch, then stand.', '3 × 8–10');
-ex('Lying Leg Curl', 'i', 'machine band', HAMS, 'gastroc', 'Lie face down in the machine and curl the heels toward the glutes.', '3 × 10–12');
-ex('Nordic Curl', 'i', 'bodyweight', HAMS, 'gastroc glute_max', 'Kneel with the ankles anchored and lower the body forward as slowly as possible, catching yourself with the hands.', '3 × 4–6');
+ex('Lying Leg Curl', 'i', 'machine band', HAMS, 'gastroc popliteus', 'Lie face down in the machine and curl the heels toward the glutes.', '3 × 10–12');
+ex('Nordic Curl', 'i', 'bodyweight', HAMS, 'gastroc glute_max popliteus', 'Kneel with the ankles anchored and lower the body forward as slowly as possible, catching yourself with the hands.', '3 × 4–6');
 ex('Kettlebell Swing', 'c', 'kettlebell dumbbell', `glute_max ${HAMS}`, 'erectors transverse_abs front_delt finger_flex', 'Hinge and hike the bell back between the legs, then snap the hips forward to float it to chest height.', '3 × 15–20');
 ex('Sumo Squat', 'c', 'barbell dumbbell kettlebell', 'add_magnus add_longus glute_max vastus_med', 'vastus_lat rectus_fem gracilis', 'Take a wide stance with toes turned out and squat straight down, pushing the knees out.', '3 × 10–12');
 ex('Lateral Lunge', 'c', 'bodyweight dumbbell kettlebell', 'add_magnus add_longus vastus_med glute_max', 'gracilis vastus_lat glute_med', 'Step wide to one side and sit back into that hip, keeping the other leg straight.', '3 × 8 each side');
@@ -146,9 +146,9 @@ ex('Standing Banded March', 'i', 'band cable machine', 'psoas iliacus rectus_fem
 ex('L-Sit', 'c', 'bodyweight', 'psoas iliacus rectus_abs', `rectus_fem ${TRI}`, 'Press up on parallettes or a bench and hold the legs straight out in front.', '3 × 10–20 s');
 
 /* ---------- lower legs & feet ---------- */
-ex('Standing Calf Raise', 'i', 'machine bodyweight dumbbell barbell', 'gastroc', 'soleus plantaris peroneals', 'Rise onto the balls of the feet as high as possible with straight knees, then lower below the step.', '3 × 12–20');
+ex('Standing Calf Raise', 'i', 'machine bodyweight dumbbell barbell', 'gastroc', 'soleus plantaris peroneals achilles', 'Rise onto the balls of the feet as high as possible with straight knees, then lower below the step.', '3 × 12–20');
 ex('Seated Calf Raise', 'i', 'machine dumbbell', 'soleus', 'gastroc deep_calf', 'Seated with weight on the knees, raise the heels as high as possible.', '3 × 15–20');
-ex('Jump Rope', 'c', 'bodyweight', 'gastroc soleus', 'tib_ant peroneals foot_sole', 'Stay light on the balls of the feet with small, quick jumps.', '3 × 1–2 min');
+ex('Jump Rope', 'c', 'bodyweight', 'gastroc soleus', 'tib_ant peroneals foot_sole achilles', 'Stay light on the balls of the feet with small, quick jumps.', '3 × 1–2 min');
 ex('Banded Foot Inversion', 'i', 'band', 'deep_calf', 'tib_ant', 'Seated with a band around the forefoot pulling outward, turn the sole of the foot inward against it.', '3 × 15');
 ex('Tibialis Raise', 'i', 'bodyweight band machine', 'tib_ant toe_extensors', '', 'Lean your back against a wall with heels forward and lift the toes as high as possible.', '3 × 15–25');
 ex('Heel Walk', 'i', 'bodyweight', 'tib_ant toe_extensors', 'peroneals', 'Walk on your heels with the toes pulled up toward the shins.', '3 × 20 m');

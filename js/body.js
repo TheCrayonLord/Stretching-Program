@@ -44,10 +44,29 @@ function muscleMaterial() {
   return m;
 }
 
-export async function loadBody(url = globalThis.STRETCH_ATLAS_MODEL || 'assets/body.bin') {
+async function download(url, onProgress) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Could not load ${url} (${res.status})`);
-  const buf = await res.arrayBuffer();
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body || !onProgress) return res.arrayBuffer();
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    onProgress(got, total);
+  }
+  const out = new Uint8Array(got);
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out.buffer;
+}
+
+export async function loadBody(onProgress, url = globalThis.STRETCH_ATLAS_MODEL || 'assets/body.bin') {
+  const buf = await download(url, onProgress);
   const headLen = new DataView(buf).getUint32(0, true);
   const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, headLen)));
   const base = 4 + headLen;
@@ -60,7 +79,7 @@ export async function loadBody(url = globalThis.STRETCH_ATLAS_MODEL || 'assets/b
 
   const fadeable = (m) => { m.transparent = true; m.userData.fade = 1; return m; };
   const boneMat = fadeable(new THREE.MeshStandardMaterial({ color: 0xe9dfcb, roughness: 0.6 }));
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xf6f3ee, roughness: 0.25 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xe2cfc2, roughness: 0.45 });
   const faceMat = fadeable(muscleMaterial());
   const muscleFor = (id) => {
     if (!muscles.has(id)) muscles.set(id, { meshes: [], near: [], mat: fadeable(muscleMaterial()) });
